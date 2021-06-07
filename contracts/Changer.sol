@@ -11,19 +11,14 @@ contract LiquidityChanger {
         nftManager = _nftManager;
     }
 
-    function getPosition(uint256 _id) public view {
-        (uint96 nonce,
-        address operator,
-        address token0,
-        address token1,
-        uint24 fee,
-        int24 tickLower,
-        int24 tickUpper,
-        uint128 liquidity,
-        uint256 feeGrowthInside0LastX128,
-        uint256 feeGrowthInside1LastX128,
-        uint128 tokensOwed0,
-        uint128 tokensOwed1) = INonfungiblePositionManager(nftManager).positions(_id);
+    function getPosition(uint256 _id) public view returns(address, address, uint128){
+        ( , , address token0, address token1, , , , uint128 liquidity, , , , ) = INonfungiblePositionManager(nftManager).positions(_id);
+        return (token0, token1, liquidity);
+
+    }
+
+    function getNftManagerAddress() external view returns(address){
+        return nftManager;
     }
 }
 
