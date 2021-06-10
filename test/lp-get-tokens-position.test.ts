@@ -1,9 +1,10 @@
+import { utils } from 'ethers';
 
 //@ts-ignore
 import { ethers } from 'hardhat';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
 import {LiquidityChanger, INonfungiblePositionManager} from '../typechain'
-import { UNISWAP_V3_NFT_POSITION_MANAGER } from './../constants/uniswaps';
+import { UNISWAP_V3_NFT_POSITION_MANAGER, UNISWAP_V3_FACTORY } from './../constants/uniswaps';
 import { expect } from 'chai';
 describe('Changer :: test get nft token position', () => {
     let deployer, user: SignerWithAddress;
@@ -16,7 +17,7 @@ describe('Changer :: test get nft token position', () => {
     before("Changer :: deploy contract", async () => {
         charger = await ethers.getContractFactory("LiquidityChanger").
             then(factory => factory.connect(deployer).
-            deploy(UNISWAP_V3_NFT_POSITION_MANAGER)).
+            deploy(UNISWAP_V3_NFT_POSITION_MANAGER, UNISWAP_V3_FACTORY)).
             then(contract => contract.deployed().
             then((deployedContract) => deployedContract as LiquidityChanger))
     });
@@ -25,9 +26,8 @@ describe('Changer :: test get nft token position', () => {
         expect(await charger.getNftManagerAddress()).to.be.eq(UNISWAP_V3_NFT_POSITION_MANAGER)
     });
     it('Changer :: get token position', async () => {
-        let [token0, token1, liquidity] = await charger.getPosition('39455')
-        expect(token0).to.be.eq('0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48') // USDT
-        expect(token1).to.be.eq('0xdAC17F958D2ee523a2206206994597C13D831ec7') // TETHER
-        console.log(liquidity.toString())
+        let [minPrice,maxPrice] = await charger.changePriceRange('39455', utils.parseEther('1'))
+        expect(minPrice.toString()).to.be.eq('499600099980003499')
+        expect(maxPrice.toString()).to.be.eq('1499600099980003499')
     })
 });
