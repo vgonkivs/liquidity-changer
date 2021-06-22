@@ -117,8 +117,8 @@ contract LiquidityChanger {
       INonfungiblePositionManager.CollectParams({
         tokenId: params.id,
         recipient: address(this),
-        amount0Max: 2**128-1,
-        amount1Max: 2**128-1
+        amount0Max: 2**128 - 1,
+        amount1Max: 2**128 - 1
       })
     );
   }
@@ -194,13 +194,13 @@ contract LiquidityChanger {
     return tokenId;
   }
 
-    function calculateNewLimitPrices(uint256 currentPrice, uint256 range)
+  function calculateNewLimitPrices(uint256 currentPrice, uint256 range)
     private
     view
     returns (uint256 minPrice, uint256 maxPrice)
   {
-    uint256 minPrice = currentPrice - range / 2;
-    uint256 maxPrice = currentPrice + range / 2;
+    uint256 minPrice = currentPrice.sub(range.div(2));
+    uint256 maxPrice = currentPrice.add(range.div(2));
     return (minPrice, maxPrice);
   }
 }
