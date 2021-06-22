@@ -1,21 +1,20 @@
 pragma solidity =0.7.6;
 pragma abicoder v2;
 
-import {INonfungiblePositionManager} from '@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol';
-import {IUniswapV3Factory} from '@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol';
-import {IUniswapV3Pool} from '@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol';
-import {IUniswapV3PoolState} from '@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol';
-import {IUniswapV3PoolImmutables} from '@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolImmutables.sol';
-import {PoolAddress} from '@uniswap/v3-periphery/contracts/libraries/PoolAddress.sol';
+import '@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol';
+import '@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol';
+import '@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol';
+import '@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol';
+import '@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolImmutables.sol';
+import '@uniswap/v3-periphery/contracts/libraries/PoolAddress.sol';
 
-import {TickMath} from '@uniswap/v3-core/contracts/libraries/TickMath.sol';
-import {LiquidityAmounts} from '@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol';
-import {SqrtPriceMath} from '@uniswap/v3-core/contracts/libraries/SqrtPriceMath.sol';
-import {TokensAmount} from './libraries/TokensAmount.sol';
+import '@uniswap/v3-core/contracts/libraries/TickMath.sol';
+import '@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol';
+import '@uniswap/v3-core/contracts/libraries/SqrtPriceMath.sol';
 
-import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import {PriceMath} from './libraries/PriceMath.sol';
-import {SafeMath} from '@openzeppelin/contracts/math/SafeMath.sol';
+import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import './libraries/PriceMath.sol';
+import '@openzeppelin/contracts/math/SafeMath.sol';
 import 'hardhat/console.sol';
 
 contract LiquidityChanger {
@@ -42,37 +41,6 @@ contract LiquidityChanger {
 
   function getNftManagerAddress() external view returns (address) {
     return nftManager;
-  }
-
-  function getTokensAmountsFromPosition(uint256 _id)
-    public
-    view
-    returns (uint256 token0Amount, uint256 token1Amount)
-  {
-    (
-      ,
-      ,
-      address token0,
-      address token1,
-      uint24 fee,
-      int24 tickLower,
-      int24 tickUpper,
-      uint128 liquidity,
-      ,
-      ,
-      ,
-
-    ) = INonfungiblePositionManager(nftManager).positions(_id);
-    (, int24 poolTick, , , , , ) = IUniswapV3PoolState(
-      getPoolAddress(token0, token1, fee)
-    ).slot0();
-    return
-      TokensAmount.getAmountsFromPosition(
-        liquidity,
-        tickLower,
-        tickUpper,
-        poolTick
-      );
   }
 
   function getPoolAddress(
@@ -121,18 +89,11 @@ contract LiquidityChanger {
       getPoolAddress(position.token0, position.token1, position.fee)
     ).tickSpacing();
 
-    (uint256 minPrice, uint256 maxPrice) = TokensAmount.calculateNewLimitPrices(
+    (uint256 minPrice, uint256 maxPrice) = calculateNewLimitPrices(
       price,
       _newRange
     );
 
-    (position.token0Amount, position.token1Amount) = TokensAmount
-    .getAmountsFromPosition(
-      position.liquidity,
-      position.tickLower,
-      position.tickUpper,
-      poolTick
-    );
     removeLiquidityAndGetTokens(position);
 
     uint256 token = mintNewToken(position, minPrice, maxPrice, tickSpacing);
@@ -156,8 +117,8 @@ contract LiquidityChanger {
       INonfungiblePositionManager.CollectParams({
         tokenId: params.id,
         recipient: address(this),
-        amount0Max: uint128(params.token0Amount),
-        amount1Max: uint128(params.token1Amount)
+        amount0Max: 2**128-1,
+        amount1Max: 2**128-1
       })
     );
   }
@@ -231,5 +192,15 @@ contract LiquidityChanger {
     );
 
     return tokenId;
+  }
+
+    function calculateNewLimitPrices(uint256 currentPrice, uint256 range)
+    private
+    view
+    returns (uint256 minPrice, uint256 maxPrice)
+  {
+    uint256 minPrice = currentPrice - range / 2;
+    uint256 maxPrice = currentPrice + range / 2;
+    return (minPrice, maxPrice);
   }
 }
