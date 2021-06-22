@@ -8,7 +8,9 @@
   },
   "scripts": {
     "test": "hardhat test",
-    "build": "hardhat compile"
+    "build": "hardhat compile",
+    "lint:sol": "solhint contracts/**/*.sol",
+    "fix:sol": "prettier --write 'contracts/**/*.sol'"
   },
   "devDependencies": {
     "@commitlint/cli": "^12.0.1",
@@ -31,6 +33,10 @@
     "ts-generator": "^0.1.1",
     "ts-node": "^9.1.1",
     "typechain": "^5.0.0",
-    "typescript": "^4.2.4"
+    "typescript": "^4.2.4",
+    "solhint": "^3.3.4",
+    "solhint-plugin-prettier": "^0.0.5",
+    "prettier": "^2.2.1",
+    "prettier-plugin-solidity": "^1.0.0-beta.10"
   }
 }
