@@ -2,6 +2,7 @@ pragma solidity =0.7.6;
 pragma abicoder v2;
 
 import '@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol';
+import '@uniswap/v3-periphery/contracts/interfaces/IMulticall.sol';
 import '@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol';
 import '@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol';
 import '@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol';
@@ -16,6 +17,8 @@ import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import './libraries/PriceMath.sol';
 import '@openzeppelin/contracts/math/SafeMath.sol';
 import 'hardhat/console.sol';
+
+import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 
 contract LiquidityChanger {
   using SafeMath for uint256;
@@ -78,86 +81,76 @@ contract LiquidityChanger {
 
     ) = INonfungiblePositionManager(nftManager).positions(_id);
     position.id = _id;
-
-    int24 poolTick = poolTick(position.token0, position.token1, position.fee);
+    uint160 sqrtRatiox96 = poolPrice(
+      position.token0,
+      position.token1,
+      position.fee
+    );
     uint256 price = PriceMath.getPriceAtSqrtRatio(
       position.token1,
       position.token0,
-      TickMath.getSqrtRatioAtTick(poolTick)
+      sqrtRatiox96
     );
     int24 tickSpacing = IUniswapV3PoolImmutables(
       getPoolAddress(position.token0, position.token1, position.fee)
     ).tickSpacing();
 
-    (uint256 minPrice, uint256 maxPrice) = calculateNewLimitPrices(
+    (uint160 minPrice, uint160 maxPrice) = calculateNewLimitPrices(
+      position.token0,
+      position.token1,
       price,
       _newRange
     );
 
-    removeLiquidityAndGetTokens(position);
+    bytes[] memory data = new bytes[](2);
+    data[0] = abi.encodeWithSignature(
+      ('decreaseLiquidity((uint256,uint128,uint256,uint256,uint256))'),
+      position.id,
+      position.liquidity,
+      0,
+      0,
+      block.timestamp
+    );
+    data[1] = abi.encodeWithSignature(
+      ('collect((uint256,address,uint128,uint128))'),
+      position.id,
+      address(this),
+      type(uint128).max,
+      type(uint128).max
+    );
+    bytes[] memory results = IMulticall(nftManager).multicall(data);
+    (position.token0Amount, position.token1Amount) = abi.decode(
+      results[1],
+      (uint256, uint256)
+    );
 
+    IERC20(position.token0).approve(nftManager, position.token0Amount);
+    IERC20(position.token1).approve(nftManager, position.token1Amount);
     uint256 token = mintNewToken(position, minPrice, maxPrice, tickSpacing);
+
     console.log(token);
   }
 
-  function removeLiquidityAndGetTokens(PositionsData memory params) public {
-    INonfungiblePositionManager(nftManager).decreaseLiquidity(
-      INonfungiblePositionManager.DecreaseLiquidityParams({
-        tokenId: params.id,
-        liquidity: params.liquidity,
-        amount0Min: 0,
-        amount1Min: 0,
-        deadline: block.timestamp
-      })
-    );
-
-    (params.token0Amount, params.token1Amount) = INonfungiblePositionManager(
-      nftManager
-    ).collect(
-      INonfungiblePositionManager.CollectParams({
-        tokenId: params.id,
-        recipient: address(this),
-        amount0Max: 2**128 - 1,
-        amount1Max: 2**128 - 1
-      })
-    );
-  }
-
-  function poolTick(
+  function poolPrice(
     address token0,
     address token1,
     uint24 fee
-  ) private view returns (int24) {
-    (, int24 poolTick, , , , , ) = IUniswapV3PoolState(
+  ) private view returns (uint160) {
+    (uint160 sqrtPrice, , , , , , ) = IUniswapV3PoolState(
       getPoolAddress(token0, token1, fee)
     ).slot0();
-    return poolTick;
+    return sqrtPrice;
   }
 
   function mintNewToken(
     PositionsData memory params,
-    uint256 minPrice,
-    uint256 maxPrice,
+    uint160 minPrice,
+    uint160 maxPrice,
     int24 tickSpacing
   ) public returns (uint256) {
-    IERC20(params.token0).approve(nftManager, params.token0Amount);
-    IERC20(params.token1).approve(nftManager, params.token1Amount);
-
-    uint160 sqrtPriceMin = PriceMath.getSqrtRatioAtPrice(
-      params.token1,
-      params.token0,
-      minPrice
-    );
-
-    uint160 sqrtPriceMax = PriceMath.getSqrtRatioAtPrice(
-      params.token1,
-      params.token0,
-      maxPrice
-    );
-
     (
       uint256 tokenId,
-      uint128 liquidity,
+      uint128 _liquidity,
       uint256 amount0,
       uint256 amount1
     ) = INonfungiblePositionManager(nftManager).mint(
@@ -165,15 +158,9 @@ contract LiquidityChanger {
         token0: params.token0,
         token1: params.token1,
         fee: params.fee,
-        tickLower: PriceMath.getTickAtSqrtRatioWithFee(
-          sqrtPriceMax,
-          tickSpacing
-        ),
-        tickUpper: PriceMath.getTickAtSqrtRatioWithFee(
-          sqrtPriceMin,
-          tickSpacing
-        ),
-        amount0Desired: params.token0Amount,
+        tickLower: PriceMath.getTickAtSqrtRatioWithFee(maxPrice, tickSpacing),
+        tickUpper: PriceMath.getTickAtSqrtRatioWithFee(minPrice, tickSpacing),
+        amount0Desired: 1 ether,
         amount1Desired: params.token1Amount,
         amount0Min: 0,
         amount1Min: 0,
@@ -181,6 +168,20 @@ contract LiquidityChanger {
         deadline: block.timestamp
       })
     );
+    console.log('params.token0Amount', params.token0Amount);
+    console.log('params.token1Amount', params.token1Amount);
+    console.log('amount0', amount0);
+    console.log('amount1', amount1);
+    console.log(
+      'params.token0Amount after mint',
+      params.token0Amount.sub(amount0)
+    );
+    console.log(
+      'params.token1Amount after mint',
+      params.token1Amount.sub(amount1)
+    );
+    console.log('liquidity before ', params.liquidity);
+    console.log('liquidity after  ', _liquidity);
 
     IERC20(params.token0).transfer(
       msg.sender,
@@ -191,16 +192,64 @@ contract LiquidityChanger {
       params.token1Amount.sub(amount1)
     );
 
+    bytes[] memory data = new bytes[](2);
+    data[0] = abi.encodeWithSelector(
+      IERC721(nftManager).approve.selector,
+      msg.sender,
+      tokenId
+    );
+    data[1] = abi.encodeWithSelector(
+      IERC721(nftManager).transferFrom.selector,
+      address(this),
+      msg.sender,
+      tokenId
+    );
+
+    IMulticall(nftManager).multicall(data);
+    require(IERC721(nftManager).ownerOf(tokenId) == msg.sender);
+
     return tokenId;
   }
 
-  function calculateNewLimitPrices(uint256 currentPrice, uint256 range)
-    private
-    view
-    returns (uint256 minPrice, uint256 maxPrice)
-  {
-    uint256 minPrice = currentPrice.sub(range.div(2));
-    uint256 maxPrice = currentPrice.add(range.div(2));
-    return (minPrice, maxPrice);
+  function calculateNewLimitPrices(
+    address token0,
+    address token1,
+    uint256 currentPrice,
+    uint256 range
+  ) private view returns (uint160 sqrtPriceMin, uint160 sqrtPriceMax) {
+    uint160 sqrtPriceMin = PriceMath.getSqrtRatioAtPrice(
+      token1,
+      token0,
+      currentPrice.sub(range.div(2))
+    );
+
+    uint160 sqrtPriceMax = PriceMath.getSqrtRatioAtPrice(
+      token1,
+      token0,
+      currentPrice.add(range.div(2))
+    );
+
+    return (sqrtPriceMin, sqrtPriceMax);
+  }
+
+  function calculateTokensAmount(
+    uint160 sqrtRatioPrice96,
+    uint160 sqrtRatioAX96,
+    uint160 sqrtRatioBX96,
+    uint128 liquidity
+  ) internal returns (uint256, uint256) {
+    uint256 token0Amount = SqrtPriceMath.getAmount0Delta(
+      sqrtRatioPrice96,
+      sqrtRatioBX96,
+      liquidity,
+      false
+    );
+    uint256 token1Amount = SqrtPriceMath.getAmount1Delta(
+      sqrtRatioAX96,
+      sqrtRatioPrice96,
+      liquidity,
+      false
+    );
+    return (token0Amount, token1Amount);
   }
 }
