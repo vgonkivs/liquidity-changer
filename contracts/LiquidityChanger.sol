@@ -128,6 +128,7 @@ contract LiquidityChanger {
     IERC20(position.token1).approve(nftManager, position.token1Amount);
     uint256 token = mintNewToken(position, minPrice, maxPrice, tickSpacing);
 
+    printposition(token);
     console.log(token);
   }
 
@@ -160,7 +161,7 @@ contract LiquidityChanger {
         fee: params.fee,
         tickLower: PriceMath.getTickAtSqrtRatioWithFee(maxPrice, tickSpacing),
         tickUpper: PriceMath.getTickAtSqrtRatioWithFee(minPrice, tickSpacing),
-        amount0Desired: 1 ether,
+        amount0Desired: params.token0Amount,
         amount1Desired: params.token1Amount,
         amount0Min: 0,
         amount1Min: 0,
@@ -207,7 +208,6 @@ contract LiquidityChanger {
 
     IMulticall(nftManager).multicall(data);
     require(IERC721(nftManager).ownerOf(tokenId) == msg.sender);
-
     return tokenId;
   }
 
@@ -251,5 +251,29 @@ contract LiquidityChanger {
       false
     );
     return (token0Amount, token1Amount);
+  }
+
+  function printposition(uint256 _id) public {
+    PositionsData memory position;
+    (
+      ,
+      ,
+      position.token0,
+      position.token1,
+      position.fee,
+      position.tickLower,
+      position.tickUpper,
+      position.liquidity,
+      ,
+      ,
+      ,
+
+    ) = INonfungiblePositionManager(nftManager).positions(_id);
+    console.log(position.token0);
+    console.log(position.token1);
+    console.log(position.fee);
+    console.log(position.liquidity);
+    console.log(uint128(position.tickLower));
+    console.log(uint128(position.tickUpper));
   }
 }

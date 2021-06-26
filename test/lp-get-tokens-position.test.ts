@@ -47,7 +47,29 @@ describe('Changer :: test get nft token position', () => {
 
         const tokenHolder = await ethers.provider.getSigner(tokenHolderAddress);
         await nonFungibleManager.connect(tokenHolder).approve(charger.address, '54390');
-        
-        await charger.connect(tokenHolder).changePriceRange('54390', utils.parseEther('0.00000000003'), { gasLimit: 12450000 })
-   });
+
+        await charger.connect(tokenHolder).changePriceRange('54390', utils.parseEther('0.0000000003'), { gasLimit: 12450000 })
+    });
+    
+    it('Changer :: change price range2', async () => {
+    const tokenHolderAddress = '0xcbf8168418e618c57ea52a6128cddbc096d3db37';
+        await network.provider.send('hardhat_impersonateAccount', [
+        tokenHolderAddress,
+        ]);
+
+        await (
+            await user.sendTransaction({
+                from: user.address,
+                to: tokenHolderAddress,
+                value: utils.parseEther('10'),
+            })
+        ).wait();
+
+        const tokenHolder = await ethers.provider.getSigner(tokenHolderAddress);
+        await nonFungibleManager.connect(tokenHolder).approve(charger.address, '54388');
+
+        await charger.connect(tokenHolder).changePriceRange('54388', utils.parseEther('0.0003'), { gasLimit: 12450000 })
+    
+    
+    });
 });
